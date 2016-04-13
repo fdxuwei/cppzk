@@ -2,3 +2,4 @@ muduo/
 *.suo
 *.user
 *.sdf
+*.opensdf

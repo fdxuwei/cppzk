@@ -1,94 +1,105 @@
-#include "ZooKeeper.h"
 #include <unistd.h>
 #include <assert.h>
-
-#ifdef ZK_TEST
-#define LOG_DEBUG std::cout
-#define LOG_ERROR std::cout
-#define LOG_WARN std::cout
-#define LOG_END std::endl
-#else
-#include <muduo/base/Logging.h>
-#define LOG_END ""
-#endif
+#include <sstream>
+#include <boost/bind.hpp>
+//#include <zookeeper/zookeeper_log.h>
+#include "ZooKeeper.h"
 
 using namespace std;
 
 #define ZK_RECV_TIMEOUT 5000
 #define ZK_BUFSIZE 10240
 
-static std::string errorStr(int code);
-static std::string eventStr(int event);
-static std::string stateStr(int state);
+static const char * errorStr(int code);
+static const char * eventStr(int event);
+static const char * stateStr(int state);
 static std::string parentPath(const std::string &path);
+
+// log, copied from zookeeper_log.h
+extern "C"
+{
+	extern ZOOAPI ZooLogLevel logLevel;
+#define LOGSTREAM getLogStream()
+
+#define LOG_ERROR(x) if(logLevel>=ZOO_LOG_LEVEL_ERROR) \
+	log_message(ZOO_LOG_LEVEL_ERROR,__LINE__,__func__,format_log_message x)
+#define LOG_WARN(x) if(logLevel>=ZOO_LOG_LEVEL_WARN) \
+	log_message(ZOO_LOG_LEVEL_WARN,__LINE__,__func__,format_log_message x)
+#define LOG_INFO(x) if(logLevel>=ZOO_LOG_LEVEL_INFO) \
+	log_message(ZOO_LOG_LEVEL_INFO,__LINE__,__func__,format_log_message x)
+#define LOG_DEBUG(x) if(logLevel==ZOO_LOG_LEVEL_DEBUG) \
+	log_message(ZOO_LOG_LEVEL_DEBUG,__LINE__,__func__,format_log_message x)
+
+	void log_message(ZooLogLevel curLevel, int line,const char* funcName,
+		const char* message);
+	const char* format_log_message(const char* format,...);
+	FILE* getLogStream();
+
+};
+//end log
 
 void ZooKeeper::defaultWatcher(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx)
 {
 	if(type == ZOO_SESSION_EVENT)
 	{
-		if(watcherCtx)
-			LOG_DEBUG << "watchctx=" << (const char *)watcherCtx << LOG_END;
+		ZooKeeper *zk = static_cast<ZooKeeper*>(watcherCtx);
 		if(state == ZOO_CONNECTED_STATE)
 		{
-			ZooKeeper::instance().setConnected(true);
-			LOG_DEBUG << "connected, session state: " << stateStr(state) << LOG_END;
+			zk->setConnected(true);
+			//
+			LOG_DEBUG(("connected, session state: %s", stateStr(state)));
+		}
+		else if(state == ZOO_EXPIRED_SESSION_STATE)
+		{
+			// 
+			LOG_ERROR(("session expired"));
+//			LOG_DEBUG << "restart" << LOG_END;
+//			zk->restart();
 		}
 		else
 		{
-			ZooKeeper::instance().setConnected(false);
-			LOG_WARN << "not connected, session state: " << stateStr(state) << LOG_END;
+			zk->setConnected(false);
+			LOG_WARN(("not connected, session state: %s", stateStr(state)));
 		}
-		// TODO: ZOO_CONNECTED_LOSS,ZOO_SESSION_EXPIRED
+		// TODO: ZOO_CONNECTED_LOSS
 	}
 	else if(type == ZOO_CREATED_EVENT)
 	{
-		LOG_WARN << "node created: " << path;
+		LOG_DEBUG(("node created: %s", path));
 	}
 	else if(type == ZOO_DELETED_EVENT)
 	{
-		LOG_WARN << "node deleted: " << path;
+		LOG_DEBUG(("node deleted: %s", path));
 	}
 	else if(type == ZOO_CHANGED_EVENT)
 	{
-		ZooKeeper &zk = ZooKeeper::instance();
-		const char *path = (const char *)watcherCtx;
-		int ret = zoo_awget(zk.zhandle_, path, &ZooKeeper::defaultWatcher, const_cast<char*>(path), &ZooKeeper::dataCompletion, path);
-		if(ZOK != ret)
-		{
-			LOG_ERROR << "awget failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
-		}
+// 		DataWatch *watch = dynamic_cast<DataWatch*>(static_cast<Watch*>(watcherCtx));
+// 		LOG_DEBUG(("ZOO_CHANGED_EVENT"));
+// 		watch->getAndSet();
+		ZooKeeper *zk = static_cast<ZooKeeper*>(watcherCtx);
+		zk->watchPool_.getWatch<DataWatch>(path)->getAndSet();
 	}
 	else if(type == ZOO_CHILD_EVENT)
 	{
-		ZooKeeper &zk = ZooKeeper::instance();
-		const char *path = (const char *)watcherCtx;
-		int ret = zoo_awget_children(zk.zhandle_, path, &ZooKeeper::defaultWatcher, const_cast<char*>(path), &ZooKeeper::stringsCompletion, path);
-		if(ZOK != ret)
-		{
-			LOG_ERROR << "awget_children failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
-		}
+//		ChildrenWatch *watch = dynamic_cast<ChildrenWatch*>(static_cast<Watch*>(watcherCtx));
+//		LOG_DEBUG(("ZOO_CHILDREN_EVENT"));
+//		watch->getAndSet();
+		ZooKeeper *zk = static_cast<ZooKeeper*>(watcherCtx);
+		zk->watchPool_.getWatch<ChildrenWatch>(path)->getAndSet();
 	}
 	else
 	{
-		LOG_WARN << "unhandled zookeeper event: " << eventStr(type) << LOG_END;
+		ZooKeeper *zk = static_cast<ZooKeeper*>(watcherCtx);
+		LOG_WARN(("unhandled zookeeper event: %s", eventStr(type)));
 	}
 }
 
 void ZooKeeper::dataCompletion(int rc, const char *value, int valueLen, const struct Stat *stat, const void *data)
 {
-	const char *path = (const char *)data; // data as path
-	ZooKeeper &zk = ZooKeeper::instance();
-	DataWatchCallback &cb = zk.getDataWatch(path);
+	const DataWatch *watch = dynamic_cast<const DataWatch*>(static_cast<const Watch*>(data)); 
 	if(ZOK == rc)
 	{
-		if(cb)
-		{
-			cb(path, string(value, valueLen));
-		}
-		else
-		{
-			LOG_WARN << "can't find data callback of node " << path << LOG_END;
-		}
+		watch->doCallback(string(value, valueLen));
 	}
 	else
 	{
@@ -96,31 +107,22 @@ void ZooKeeper::dataCompletion(int rc, const char *value, int valueLen, const st
 		// ZOPERATIONTIMEOUT
 		// ZNONODE
 		// ZNOAUTH
-		LOG_ERROR << "data completion error, ret=" << errorStr(rc) << ", path=" << path << LOG_END;
+		LOG_ERROR(("data completion error, ret=%s, path=%s", errorStr(rc), watch->path().c_str()));
 	}
 	//
 }
 
 void ZooKeeper::stringsCompletion(int rc, const struct String_vector *strings, const void *data)
 {
-	const char *path = (const char *)data; // data as path
-	ZooKeeper &zk = ZooKeeper::instance();
-	ChildrenWatchCallback &cb = zk.getChildrenWatch(path);
+	const ChildrenWatch *watch = dynamic_cast<const ChildrenWatch*>(static_cast<const Watch*>(data)); 
 	if(ZOK == rc)
 	{
-		if(cb)
+		vector<string> vecs;
+		for(int i = 0; i < strings->count; ++i)
 		{
-			vector<string> vecs;
-			for(int i = 0; i < strings->count; ++i)
-			{
-				vecs.push_back(strings->data[i]);
-			}
-			cb(path, vecs);
+			vecs.push_back(strings->data[i]);
 		}
-		else
-		{
-			LOG_WARN << "can't find children callback of node " << path << LOG_END;
-		}
+		watch->doCallback(vecs);
 	}
 	else
 	{
@@ -128,7 +130,7 @@ void ZooKeeper::stringsCompletion(int rc, const struct String_vector *strings, c
 		// ZOPERATIONTIMEOUT
 		// ZNONODE
 		// ZNOAUTH
-		LOG_ERROR << "strings completion error, ret=" << errorStr(rc) << ", path=" << path << LOG_END;
+		LOG_ERROR(("strings completion error, ret=%s, path=%s", errorStr(rc), watch->path().c_str()));
 	}
 }
 
@@ -137,7 +139,7 @@ ZooKeeper::ZooKeeper()
 	, connected_ (false)
 	, defaultLogLevel_ (ZOO_LOG_LEVEL_WARN)
 {
-	setDebugLogLevel(false);
+	setDebugLogLevel(true);
 }
 
 ZooKeeper::~ZooKeeper()
@@ -151,7 +153,9 @@ ZooKeeper::~ZooKeeper()
 
 bool ZooKeeper::init(const std::string &connectString)
 {
-	zhandle_ = zookeeper_init(connectString.c_str(), defaultWatcher, ZK_RECV_TIMEOUT, NULL, NULL, 0);
+	//
+	connectString_ = connectString;
+	zhandle_ = zookeeper_init(connectString.c_str(), defaultWatcher, ZK_RECV_TIMEOUT, NULL, this, 0);
 	// 2s timeout
 	for(int i = 0; i < 200; ++i)
 	{
@@ -164,6 +168,24 @@ bool ZooKeeper::init(const std::string &connectString)
 	return false;
 }
 
+void ZooKeeper::restart()
+{
+	// zookeeper_close(zhandle_); // close an expired session will cause segment fault
+	zhandle_ = zookeeper_init(connectString_.c_str(), defaultWatcher, ZK_RECV_TIMEOUT, NULL, this, 0);
+	// 2s timeout
+	for(int i = 0; i < 200; ++i)
+	{
+		usleep(10000);
+		if(connected_)
+		{
+			LOG_WARN(("watchPool_.getAndSetAll()"));
+			watchPool_.getAndSetAll();
+			return;
+		}
+	}
+	LOG_ERROR(("restart failed."));
+}
+
 bool ZooKeeper::getData(const std::string &path, std::string &value)
 {
 	char buf[ZK_BUFSIZE] = {0};
@@ -171,7 +193,7 @@ bool ZooKeeper::getData(const std::string &path, std::string &value)
 	int ret = zoo_get(zhandle_, path.c_str(), false, buf, &bufsize, NULL);
 	if(ZOK != ret)
 	{
-		LOG_ERROR << "get " << path << " failed, ret=" << errorStr(ret) << LOG_END;
+		LOG_ERROR(("get %s failed, ret=%s", path.c_str(), errorStr(ret)));
 		return false;
 	}
 	else
@@ -193,7 +215,7 @@ bool ZooKeeper::setData(const std::string &path, const std::string &value)
 		}
 		else
 		{
-			LOG_ERROR << "set " << path << " failed, ret=" << errorStr(ret) << LOG_END;
+			LOG_ERROR(("get %s failed, ret=%s", path.c_str(), errorStr(ret)));
 			return false;
 		}
 	}
@@ -209,7 +231,7 @@ bool ZooKeeper::getChildren(const std::string &path, std::vector<std::string> &c
 	int ret = zoo_get_children(zhandle_, path.c_str(), false, &sv);
 	if(ZOK != ret)
 	{
-		LOG_ERROR << "get children " << path << " failed, ret=" << errorStr(ret) << LOG_END;
+		LOG_ERROR(("get children %s failed, ret=%s", path.c_str(), errorStr(ret)));
 		return false;
 	}
 	else
@@ -266,7 +288,7 @@ ZkRet ZooKeeper::createTheNode(int flag, const std::string &path, const std::str
 			ret = zoo_create(zhandle_, path.c_str(), value.c_str(), value.length(), &ZOO_OPEN_ACL_UNSAFE, flag, rpath, rpathlen);
 			if(ZOK != ret && ZNODEEXISTS != ret)
 			{
-				LOG_ERROR << "create node failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
+				LOG_ERROR(("create node failed, path=%s, ret=%s", path.c_str(), errorStr(ret)));
 			}
 			return ZkRet(ret);	
 		}
@@ -277,73 +299,22 @@ ZkRet ZooKeeper::createTheNode(int flag, const std::string &path, const std::str
 	}
 	else if(ZOK != ret && ZNODEEXISTS != ret)
 	{
-		LOG_ERROR << "create node failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
+		LOG_ERROR(("create node failed, path=%s, ret=%s", path.c_str(), errorStr(ret)));
 	}
 	return ZkRet(ret);
 }
 
 
-void ZooKeeper::watchData(const std::string &path, DataWatchCallback wc)
+void ZooKeeper::watchData(const std::string &path, const DataWatchCallback &wc)
 {
-	dataWatch_[path] = wc;
-	int ret = zoo_awget(zhandle_, path.c_str(), &ZooKeeper::defaultWatcher, const_cast<char*>(path.c_str()), &ZooKeeper::dataCompletion, path.c_str());
-	if(ZOK != ret)
-	{
-		// ZBADARGUMENTS
-		// ZINVALIDSTATE
-		// ZMARSHALLINGERROR
-		LOG_ERROR << "aget failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
-	}
+	WatchPtr wp = watchPool_.createWatch<DataWatch>(this, path, wc);
+	wp->getAndSet();
 }
 
-void ZooKeeper::watchChildren(const std::string &path, ChildrenWatchCallback wc)
+void ZooKeeper::watchChildren(const std::string &path, const ChildrenWatchCallback &wc)
 {
-	childrenWatch_[path] = wc;
-	int ret = zoo_awget_children(zhandle_, path.c_str(), &ZooKeeper::defaultWatcher, const_cast<char*>(path.c_str()), &ZooKeeper::stringsCompletion, path.c_str());
-	if(ZOK != ret)
-	{
-		// ZBADARGUMENTS
-		// ZINVALIDSTATE
-		// ZMARSHALLINGERROR
-		LOG_ERROR << "awget_children failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
-	}
-}
-
-
-bool ZooKeeper::hasDataWatch(const std::string &path)
-{
-	return (dataWatch_.find(path) != dataWatch_.end());
-}
-
-bool ZooKeeper::hasChildrenWatch(const std::string &path)
-{
-	return (childrenWatch_.find(path) != childrenWatch_.end());
-}
-
-DataWatchCallback& ZooKeeper::getDataWatch(const std::string &path)
-{
-	DataWatchMap::iterator it = dataWatch_.find(path);
-	if(dataWatch_.end() == it)
-	{
-		return emptyDataWatchCallback_;
-	}
-	else
-	{
-		return it->second;
-	}
-}
-
-ChildrenWatchCallback& ZooKeeper::getChildrenWatch(const std::string &path)
-{
-	ChildrenWatchMap::iterator it = childrenWatch_.find(path);
-	if(childrenWatch_.end() == it)
-	{
-		return emptyChildrenWatchCallback_;
-	}
-	else
-	{
-		return it->second;
-	}
+	WatchPtr wp = watchPool_.createWatch<ChildrenWatch>(this, path, wc);
+	wp->getAndSet();
 }
 
 void ZooKeeper::setDebugLogLevel(bool open)
@@ -356,7 +327,7 @@ void ZooKeeper::setDebugLogLevel(bool open)
 	zoo_set_debug_level(loglevel);
 }
 
-string errorStr(int code)
+const char*  errorStr(int code)
 {
 	switch(code)
 	{
@@ -413,7 +384,7 @@ string errorStr(int code)
 	}
 }
 
-std::string eventStr(int event)
+const char* eventStr(int event)
 {
 	if(ZOO_CREATED_EVENT == event)
 		return "ZOO_CREATED_EVENT";
@@ -429,7 +400,7 @@ std::string eventStr(int event)
 		return "unknown event";
 }
 
-std::string stateStr(int state)
+const char* stateStr(int state)
 {
 	if(ZOO_EXPIRED_SESSION_STATE == state)
 		return "ZOO_EXPIRED_SESSION_STATE";
@@ -468,32 +439,44 @@ std::string parentPath(const std::string &path)
 
 // watch
 
-ZooKeeper::Watch::Watch(zhandle_t *zh, const std::string &path)
-	: zh_ (zh)
+ZooKeeper::Watch::Watch(ZooKeeper *zk, const std::string &path)
+	: zk_ (zk)
 	, path_ (path)
 {
 
 }
 
-void ZooKeeper::DataWatch::getAndSet()
+ZooKeeper::DataWatch::DataWatch(ZooKeeper *zk, const std::string &path, const CallbackType &cb)
+	: Watch (zk, path)
+	, cb_ (cb)
 {
-	ZooKeeper &zk = ZooKeeper::instance();
-	int ret = zoo_awget(zk.zhandle_, path_.c_str(), &ZooKeeper::defaultWatcher, this, &ZooKeeper::dataCompletion, path_.c_str());
+
+}
+
+ZooKeeper::ChildrenWatch::ChildrenWatch(ZooKeeper *zk, const std::string &path, const CallbackType &cb)
+	: Watch (zk, path)
+	, cb_ (cb)
+{
+
+}
+
+void ZooKeeper::DataWatch::getAndSet() const
+{
+	int ret = zoo_awget(zk_->zhandle_, path_.c_str(), &ZooKeeper::defaultWatcher, this->zk(), &ZooKeeper::dataCompletion, this);
 	if(ZOK != ret)
 	{
 		// ZBADARGUMENTS
 		// ZINVALIDSTATE
 		// ZMARSHALLINGERROR
-		LOG_ERROR << "awget failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
+		LOG_ERROR(("awget failed, path=%s, ret=%s", path_.c_str(), errorStr(ret)));
 	}
 }
 
-void ZooKeeper::ChildrenWatch::getAndSet()
+void ZooKeeper::ChildrenWatch::getAndSet() const
 {
-	ZooKeeper &zk = ZooKeeper::instance();
-	int ret = zoo_awget_children(zk.zhandle_, path_, &ZooKeeper::defaultWatcher, this, &ZooKeeper::stringsCompletion, path_.c_str());
+	int ret = zoo_awget_children(zk_->zhandle_, path_.c_str(), &ZooKeeper::defaultWatcher, this->zk(), &ZooKeeper::stringsCompletion, this);
 	if(ZOK != ret)
 	{
-		LOG_ERROR << "awget_children failed, path=" << path << ", ret=" << errorStr(ret) << LOG_END;
+		LOG_ERROR(("awget_children failed, path=%s, ret=%s", path_.c_str(), errorStr(ret)));
 	}
 }

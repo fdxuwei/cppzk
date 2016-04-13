@@ -10,11 +10,13 @@ using namespace std;
 void testSet(const char *path, const char *data);
 void testCreate(const char *path, const char *data, char type, bool recursive);
 
+// define data callback
 void dataCallback(const std::string &path, const std::string &value)
 {
 	cout << "data changed: " << " path=" << path << ", data=" << value << endl;
 }
 
+// define children callback
 void childrenCallback(const std::string &path, const vector<string> &children)
 {
 	cout << "children changed: " << ", path=" << path << ", children=";
@@ -27,34 +29,40 @@ void childrenCallback(const std::string &path, const vector<string> &children)
 	cout << endl;
 }
 
+// define ZooKeeper object
+ZooKeeper zk; 
+
+
 int main()
 {
-	ZooKeeper &zk = ZooKeeper::instance(); 
+	// init ZooKeeper	
 	if(!zk.init("127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183"))
 	{
 		cout << "init zk failed." << endl;
 		return -1;
 	}
-/*
+
 	// set normal data
 	cout << "***********start test***********" << endl;
 	testSet("/testn", "testn-data");
 	testSet("/testnr/testnr", "testnr-data");
-	//
-	testCreate("/createn", "createn-data", 'n', false);
-	testCreate("/createsn", "createsn-data", 's', false);
-	testCreate("/createen", "createen-data", 'e', false);
-	testCreate("/createnr/createnr/createnr", "createnr-data", 'n', true);
-	testCreate("/createsnr/createsnr/createsnr", "createsnr-data", 's', true);
-	testCreate("/createenr/createenr/createenr", "createenr-data", 'e', true);
-*/
+	// test for create
+	testCreate("/createn", "createn-data", 'n', false);// create normal node, not recursively
+	testCreate("/createsn", "createsn-data", 's', false); // create sequence node, not recursively
+	testCreate("/createen", "createen-data", 'e', false); // create ephemeral node, not recursively
+	testCreate("/createnr/createnr/createnr", "createnr-data", 'n', true); // create normal node, recursively
+	testCreate("/createsnr/createsnr/createsnr", "createsnr-data", 's', true); // create sequence node, recursively
+	testCreate("/createenr/createenr/createenr", "createenr-data", 'e', true); // create ephemeral node, recursively
 
+	// test for data watch
 	zk.watchData("/testw", boost::bind(&dataCallback, _1, _2));
-//	zk.watchData("/testw1", boost::bind(&dataCallback, _1, _2));
+	zk.watchData("/testw1", boost::bind(&dataCallback, _1, _2));
 
-/*
+	// test for children watch
 	zk.watchChildren("/testc", boost::bind(&childrenCallback, _1, _2));
-*/
+	
+	// set log
+	zk.setLogStream(stderr);
 	//
 	while(1)
 	{
@@ -68,7 +76,6 @@ void testSet(const char *path, const char *data)
 {
 	// normal node 
 	cout << "testSet(\"" << path << "\", \"" << data << ")" << endl;
-	ZooKeeper &zk = ZooKeeper::instance(); 
 	//
 	//
 	assert(zk.setData(path, data));
@@ -83,7 +90,6 @@ void testCreate(const char *path, const char *data, char type, bool recursive)
 	//
 	cout << "testCreate(\"" << path << "\", \"" << data << ", '" << type << "', " << recursive <<")" << endl;
 	//
-	ZooKeeper &zk = ZooKeeper::instance(); 
 	if('n' == type)
 	{
 		ZkRet zr = zk.createNode(path, data, recursive);
