@@ -67,12 +67,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\ZooKeeper.h" />
-    <ClInclude Include="..\zookeeper\proto.h" />
-    <ClInclude Include="..\zookeeper\recordio.h" />
-    <ClInclude Include="..\zookeeper\zookeeper.h" />
-    <ClInclude Include="..\zookeeper\zookeeper.jute.h" />
-    <ClInclude Include="..\zookeeper\zookeeper_log.h" />
-    <ClInclude Include="..\zookeeper\zookeeper_version.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\test.cc" />
