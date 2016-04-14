@@ -1,4 +1,8 @@
+#ifdef WIN32
+#include <Windows.h>
+#else
 #include <unistd.h>
+#endif
 #include <assert.h>
 #include <sstream>
 #include <boost/bind.hpp>
@@ -139,7 +143,7 @@ ZooKeeper::ZooKeeper()
 	, connected_ (false)
 	, defaultLogLevel_ (ZOO_LOG_LEVEL_WARN)
 {
-	setDebugLogLevel(true);
+	setDebugLogLevel(false);
 }
 
 ZooKeeper::~ZooKeeper()
@@ -159,7 +163,7 @@ bool ZooKeeper::init(const std::string &connectString)
 	// 2s timeout
 	for(int i = 0; i < 200; ++i)
 	{
-		usleep(10000);
+		miliSleep(1);
 		if(connected_)
 		{
 			return true;
@@ -175,7 +179,7 @@ void ZooKeeper::restart()
 	// 2s timeout
 	for(int i = 0; i < 200; ++i)
 	{
-		usleep(10000);
+		miliSleep(1);
 		if(connected_)
 		{
 			LOG_WARN(("watchPool_.getAndSetAll()"));
@@ -479,4 +483,13 @@ void ZooKeeper::ChildrenWatch::getAndSet() const
 	{
 		LOG_ERROR(("awget_children failed, path=%s, ret=%s", path_.c_str(), errorStr(ret)));
 	}
+}
+
+void ZooKeeper::miliSleep(int milisec)
+{
+#ifdef WIN32
+	Sleep(milisec);
+#else
+	usleep(milisec*1000);
+#endif
 }

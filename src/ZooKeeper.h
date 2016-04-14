@@ -147,6 +147,7 @@ private:
 	//
 	ZkRet createTheNode(int flag, const std::string &path, const std::string &value, char *rpath, int rpathlen, bool recursive);
 	//
+	void miliSleep(int milisec);
 	//
 	zhandle_t *zhandle_;
 	std::string connectString_;
