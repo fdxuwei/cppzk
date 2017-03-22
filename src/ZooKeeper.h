@@ -47,12 +47,13 @@ public:
 	ZkRet createEphemeralNode(const std::string &path, const std::string &value, bool recursive = true);
 	// sequence node, the created node's name is not equal to the given path, it is like "path-xx", xx is an auto-increment number 
 	ZkRet createSequenceNode(const std::string &path, const std::string &value, std::string &rpath, bool recursive = true);
-	void watchData(const std::string &path, const DataWatchCallback &wc);
-	void watchChildren(const std::string &path, const ChildrenWatchCallback &wc);
+	bool watchData(const std::string &path, const DataWatchCallback &wc);
+	bool watchChildren(const std::string &path, const ChildrenWatchCallback &wc);
 	//
 	void setDebugLogLevel(bool open = true);
 	//
-	void setLogStream(FILE *stream){ zoo_set_log_stream(stream); }
+	bool setFileLog(const std::string &dir = "./");
+	void setConsoleLog();
 	//
 	void restart();
 private:
@@ -155,6 +156,7 @@ private:
 	ZooLogLevel defaultLogLevel_;
 	WatchPool watchPool_;
 	//
+	FILE *logStream_;
 };
 
 

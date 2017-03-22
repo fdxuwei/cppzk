@@ -42,6 +42,12 @@ int main()
 		return -1;
 	}
 
+	// set log
+	// zk.setDebugLogLevel();
+	// zk.setConsoleLog();
+	zk.setFileLog();
+
+
 	// set normal data
 	cout << "***********start test***********" << endl;
 	testSet("/testn", "testn-data");
@@ -55,14 +61,21 @@ int main()
 	testCreate("/createenr/createenr/createenr", "createenr-data", 'e', true); // create ephemeral node, recursively
 
 	// test for data watch
-	zk.watchData("/testw", boost::bind(&dataCallback, _1, _2));
-	zk.watchData("/testw1", boost::bind(&dataCallback, _1, _2));
+	if(!zk.watchData("/testw", boost::bind(&dataCallback, _1, _2)))
+	{
+		cout << "watch data failed, path=/testw" << endl;
+	}
+	if(!zk.watchData("/testw1", boost::bind(&dataCallback, _1, _2)))
+	{
+		cout << "watch data failed, path=/testw1" << endl;
+	}
 
 	// test for children watch
-	zk.watchChildren("/testc", boost::bind(&childrenCallback, _1, _2));
+	if(!zk.watchChildren("/testc", boost::bind(&childrenCallback, _1, _2)))
+	{
+		cout << "watch children failed, path=/testc" << endl;
+	}
 	
-	// set log
-	zk.setLogStream(stderr);
 	//
 	while(1)
 	{

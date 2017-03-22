@@ -142,6 +142,7 @@ ZooKeeper::ZooKeeper()
 	: zhandle_ (NULL)
 	, connected_ (false)
 	, defaultLogLevel_ (ZOO_LOG_LEVEL_WARN)
+	, logStream_ (stderr)
 {
 	setDebugLogLevel(false);
 }
@@ -152,6 +153,7 @@ ZooKeeper::~ZooKeeper()
 	{
 		zookeeper_close(zhandle_);
 		zhandle_ = NULL;
+		fclose(logStream_);
 	}
 }
 
@@ -309,16 +311,26 @@ ZkRet ZooKeeper::createTheNode(int flag, const std::string &path, const std::str
 }
 
 
-void ZooKeeper::watchData(const std::string &path, const DataWatchCallback &wc)
+bool ZooKeeper::watchData(const std::string &path, const DataWatchCallback &wc)
 {
+	if(!exists(path))
+	{
+		return false;
+	}
 	WatchPtr wp = watchPool_.createWatch<DataWatch>(this, path, wc);
 	wp->getAndSet();
+	return true;
 }
 
-void ZooKeeper::watchChildren(const std::string &path, const ChildrenWatchCallback &wc)
+bool ZooKeeper::watchChildren(const std::string &path, const ChildrenWatchCallback &wc)
 {
+	if(!exists(path))
+	{
+		return false;
+	}
 	WatchPtr wp = watchPool_.createWatch<ChildrenWatch>(this, path, wc);
 	wp->getAndSet();
+	return true;
 }
 
 void ZooKeeper::setDebugLogLevel(bool open)
@@ -483,6 +495,33 @@ void ZooKeeper::ChildrenWatch::getAndSet() const
 	{
 		LOG_ERROR(("awget_children failed, path=%s, ret=%s", path_.c_str(), errorStr(ret)));
 	}
+}
+
+bool ZooKeeper::setFileLog(const std::string &dir /* = "./" */)
+{
+	if((logStream_ != NULL) && (logStream_ != stderr))
+	{
+		fclose(logStream_);
+	}
+	std::string filename(dir+"/zookeeper.log");
+	logStream_ = fopen(filename.c_str(), "w");
+	if(!logStream_)
+	{
+		logStream_ = stderr;
+		return false;
+	}
+	zoo_set_log_stream(logStream_);
+	return true;
+}
+
+void ZooKeeper::setConsoleLog()
+{
+	if((logStream_ != NULL) && (logStream_ != stderr))
+	{
+		fclose(logStream_);
+	}
+	logStream_ = stderr;
+	zoo_set_log_stream(logStream_);
 }
 
 void ZooKeeper::miliSleep(int milisec)
