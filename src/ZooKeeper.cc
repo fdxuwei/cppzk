@@ -11,7 +11,7 @@
 
 using namespace std;
 
-#define ZK_RECV_TIMEOUT 5000
+#define ZK_RECV_TIMEOUT 15000
 #define ZK_BUFSIZE 10240
 
 static const char * errorStr(int code);
@@ -176,7 +176,7 @@ bool ZooKeeper::init(const std::string &connectString)
 
 void ZooKeeper::restart()
 {
-	if(zhandle_)
+	if(NULL != zhandle_)
 	{
 		zookeeper_close(zhandle_); 
 	}
@@ -192,6 +192,7 @@ void ZooKeeper::restart()
 			return;
 		}
 	}
+	zhandle_ = NULL;
 	LOG_ERROR(("restart failed."));
 }
 
