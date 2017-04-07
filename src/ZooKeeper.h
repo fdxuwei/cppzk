@@ -55,11 +55,11 @@ public:
 	bool setFileLog(const std::string &dir = "./");
 	void setConsoleLog();
 	//
-	void restart();
 private:
 	// for inner use, you should never call these function
 	void setConnected(bool connect = true){connected_ = connect; }
 	bool connected()const{return connected_; }
+	void restart();
 	//
 	// watch class
 	class Watch

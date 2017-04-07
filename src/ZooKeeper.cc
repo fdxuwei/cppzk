@@ -58,7 +58,7 @@ void ZooKeeper::defaultWatcher(zhandle_t *zh, int type, int state, const char *p
 			// 
 			LOG_ERROR(("session expired"));
 //			LOG_DEBUG << "restart" << LOG_END;
-//			zk->restart();
+			zk->restart();
 		}
 		else
 		{
@@ -163,7 +163,7 @@ bool ZooKeeper::init(const std::string &connectString)
 	connectString_ = connectString;
 	zhandle_ = zookeeper_init(connectString.c_str(), defaultWatcher, ZK_RECV_TIMEOUT, NULL, this, 0);
 	// 2s timeout
-	for(int i = 0; i < 200; ++i)
+	for(int i = 0; i < 2000; ++i)
 	{
 		miliSleep(1);
 		if(connected_)
@@ -176,10 +176,13 @@ bool ZooKeeper::init(const std::string &connectString)
 
 void ZooKeeper::restart()
 {
-	// zookeeper_close(zhandle_); // close an expired session will cause segment fault
+	if(zhandle_)
+	{
+		zookeeper_close(zhandle_); 
+	}
 	zhandle_ = zookeeper_init(connectString_.c_str(), defaultWatcher, ZK_RECV_TIMEOUT, NULL, this, 0);
 	// 2s timeout
-	for(int i = 0; i < 200; ++i)
+	for(int i = 0; i < 2000; ++i)
 	{
 		miliSleep(1);
 		if(connected_)
