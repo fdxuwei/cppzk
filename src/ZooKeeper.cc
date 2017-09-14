@@ -157,7 +157,7 @@ ZooKeeper::~ZooKeeper()
 	}
 }
 
-bool ZooKeeper::init(const std::string &connectString)
+ZkRet ZooKeeper::init(const std::string &connectString)
 {
 	//
 	connectString_ = connectString;
@@ -168,10 +168,10 @@ bool ZooKeeper::init(const std::string &connectString)
 		miliSleep(1);
 		if(connected_)
 		{
-			return true;
+			return ZkRet(ZOK);
 		}
 	}
-	return false;
+	return ZkRet(-1);
 }
 
 void ZooKeeper::restart()
@@ -196,7 +196,7 @@ void ZooKeeper::restart()
 	LOG_ERROR(("restart failed."));
 }
 
-bool ZooKeeper::getData(const std::string &path, std::string &value)
+ZkRet ZooKeeper::getData(const std::string &path, std::string &value)
 {
 	char buf[ZK_BUFSIZE] = {0};
 	int bufsize = sizeof(buf);
@@ -204,16 +204,15 @@ bool ZooKeeper::getData(const std::string &path, std::string &value)
 	if(ZOK != ret)
 	{
 		LOG_ERROR(("get %s failed, ret=%s", path.c_str(), errorStr(ret)));
-		return false;
 	}
 	else
 	{
 		value = buf;
-		return true;
 	}
+	return ZkRet(ret);
 }
 
-bool ZooKeeper::setData(const std::string &path, const std::string &value)
+ZkRet ZooKeeper::setData(const std::string &path, const std::string &value)
 {
 	int ret = zoo_set(zhandle_, path.c_str(), value.c_str(), value.length(), -1);
 	if(ZOK != ret)
@@ -226,23 +225,23 @@ bool ZooKeeper::setData(const std::string &path, const std::string &value)
 		else
 		{
 			LOG_ERROR(("get %s failed, ret=%s", path.c_str(), errorStr(ret)));
-			return false;
+			return ZkRet(ret);
 		}
 	}
 	else
 	{
-		return true;
+		return ZkRet(ret);
 	}
 }
 
-bool ZooKeeper::getChildren(const std::string &path, std::vector<std::string> &children)
+ZkRet ZooKeeper::getChildren(const std::string &path, std::vector<std::string> &children)
 {
 	String_vector sv;
 	int ret = zoo_get_children(zhandle_, path.c_str(), false, &sv);
 	if(ZOK != ret)
 	{
 		LOG_ERROR(("get children %s failed, ret=%s", path.c_str(), errorStr(ret)));
-		return false;
+		return ZkRet(ret);
 	}
 	else
 	{
@@ -250,14 +249,14 @@ bool ZooKeeper::getChildren(const std::string &path, std::vector<std::string> &c
 		{
 			children.push_back(sv.data[i]);
 		}
-		return true;
+		return ZkRet(ret);
 	}
 }
 
-bool ZooKeeper::exists(const std::string &path)
+ZkRet ZooKeeper::exists(const std::string &path)
 {
 	int ret = zoo_exists(zhandle_, path.c_str(), false, NULL);
-	return (ZOK == ret);
+	return ZkRet(ret);
 }
 
 ZkRet ZooKeeper::createNode(const std::string &path, const std::string &value, bool recursive/*=true*/)
@@ -315,26 +314,28 @@ ZkRet ZooKeeper::createTheNode(int flag, const std::string &path, const std::str
 }
 
 
-bool ZooKeeper::watchData(const std::string &path, const DataWatchCallback &wc)
+ZkRet ZooKeeper::watchData(const std::string &path, const DataWatchCallback &wc)
 {
-	if(!exists(path))
+	ZkRet ex = exists(path);
+	if(!ex)
 	{
-		return false;
+		return ex;
 	}
 	WatchPtr wp = watchPool_.createWatch<DataWatch>(this, path, wc);
 	wp->getAndSet();
-	return true;
+	return ZkRet(ZOK);
 }
 
-bool ZooKeeper::watchChildren(const std::string &path, const ChildrenWatchCallback &wc)
+ZkRet ZooKeeper::watchChildren(const std::string &path, const ChildrenWatchCallback &wc)
 {
-	if(!exists(path))
+	ZkRet ex = exists(path);
+	if(!ex)
 	{
-		return false;
+		return ex;
 	}
 	WatchPtr wp = watchPool_.createWatch<ChildrenWatch>(this, path, wc);
 	wp->getAndSet();
-	return true;
+	return ZkRet(ZOK);
 }
 
 void ZooKeeper::setDebugLogLevel(bool open)
@@ -501,7 +502,7 @@ void ZooKeeper::ChildrenWatch::getAndSet() const
 	}
 }
 
-bool ZooKeeper::setFileLog(const std::string &dir /* = "./" */)
+ZkRet ZooKeeper::setFileLog(const std::string &dir /* = "./" */)
 {
 	if((logStream_ != NULL) && (logStream_ != stderr))
 	{
@@ -512,10 +513,10 @@ bool ZooKeeper::setFileLog(const std::string &dir /* = "./" */)
 	if(!logStream_)
 	{
 		logStream_ = stderr;
-		return false;
+		return ZkRet(-1);
 	}
 	zoo_set_log_stream(logStream_);
-	return true;
+	return ZkRet(ZOK);
 }
 
 void ZooKeeper::setConsoleLog()

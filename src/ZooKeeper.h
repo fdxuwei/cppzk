@@ -22,7 +22,7 @@ public:
 	bool ok() const {return ZOK == code_; }
 	bool nodeExist() const {return ZNODEEXISTS == code_; }
 	bool nodeNotExist() const {return ZNONODE == code_; }
-	operator bool(){return ok(); }
+	operator bool() const {return ok(); }
 protected:
 	ZkRet(){code_ = ZOK; }
 	ZkRet(int c){code_ = c; }
@@ -37,23 +37,23 @@ public:
 	ZooKeeper();
 	~ZooKeeper();
 	//
-	bool init(const std::string &connectString);
-	bool getData(const std::string &path, std::string &value);
-	bool setData(const std::string &path, const std::string &value);
-	bool getChildren(const std::string &path, std::vector<std::string> &children);
-	bool exists(const std::string &path);
+	ZkRet init(const std::string &connectString);
+	ZkRet getData(const std::string &path, std::string &value);
+	ZkRet setData(const std::string &path, const std::string &value);
+	ZkRet getChildren(const std::string &path, std::vector<std::string> &children);
+	ZkRet exists(const std::string &path);
 	ZkRet createNode(const std::string &path, const std::string &value, bool recursive = true);
 	// ephemeral node is a special node, its has the same lifetime as the session 
 	ZkRet createEphemeralNode(const std::string &path, const std::string &value, bool recursive = true);
 	// sequence node, the created node's name is not equal to the given path, it is like "path-xx", xx is an auto-increment number 
 	ZkRet createSequenceNode(const std::string &path, const std::string &value, std::string &rpath, bool recursive = true);
-	bool watchData(const std::string &path, const DataWatchCallback &wc);
-	bool watchChildren(const std::string &path, const ChildrenWatchCallback &wc);
+	ZkRet watchData(const std::string &path, const DataWatchCallback &wc);
+	ZkRet watchChildren(const std::string &path, const ChildrenWatchCallback &wc);
 	//
 	void setDebugLogLevel(bool open = true);
 	//
-	bool setFileLog(const std::string &dir = "./");
-	void setConsoleLog();
+	ZkRet setFileLog(const std::string &dir = "./");
+	ZkRet setConsoleLog();
 	//
 private:
 	// for inner use, you should never call these function
