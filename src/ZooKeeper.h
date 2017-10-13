@@ -47,6 +47,7 @@ public:
 	ZkRet createEphemeralNode(const std::string &path, const std::string &value, bool recursive = true);
 	// sequence node, the created node's name is not equal to the given path, it is like "path-xx", xx is an auto-increment number 
 	ZkRet createSequenceNode(const std::string &path, const std::string &value, std::string &rpath, bool recursive = true);
+	ZkRet createSequenceEphemeralNode(const std::string &path, const std::string &value, std::string &rpath, bool recursive = true);
 	ZkRet watchData(const std::string &path, const DataWatchCallback &wc);
 	ZkRet watchChildren(const std::string &path, const ChildrenWatchCallback &wc);
 	//
@@ -55,6 +56,9 @@ public:
 	ZkRet setFileLog(const std::string &dir = "./");
 	ZkRet setConsoleLog();
 	//
+	static std::string getParentPath(const std::string &path);
+	static std::string getNodeName(const std::string &path);
+	static std::string getParentNodeName(const std::string &path);
 private:
 	// for inner use, you should never call these function
 	void setConnected(bool connect = true){connected_ = connect; }

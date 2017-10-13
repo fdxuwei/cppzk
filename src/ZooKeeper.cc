@@ -277,9 +277,17 @@ ZkRet ZooKeeper::createSequenceNode(const std::string &path, const std::string &
 	return zr;
 }
 
+ZkRet ZooKeeper::createSequenceEphemeralNode(const std::string &path, const std::string &value, std::string &rpath, bool recursive/*=true*/)
+{
+	char buf[ZK_BUFSIZE] = {0};
+	ZkRet zr = createTheNode(ZOO_SEQUENCE|ZOO_EPHEMERAL, path, value, buf, sizeof(buf), recursive);
+	rpath = buf;
+	return zr;
+}
+
 ZkRet ZooKeeper::createTheNode(int flag, const std::string &path, const std::string &value, char *rpath, int rpathlen, bool recursive)
 {
-	assert((NULL == rpath) || (flag == ZOO_SEQUENCE));
+	assert((NULL == rpath) || (flag & ZOO_SEQUENCE));
 	int ret = zoo_create(zhandle_, path.c_str(), value.c_str(), value.length(), &ZOO_OPEN_ACL_UNSAFE, flag, rpath, rpathlen);
 	if(ZNONODE == ret)
 	{
@@ -519,7 +527,7 @@ ZkRet ZooKeeper::setFileLog(const std::string &dir /* = "./" */)
 	return ZkRet(ZOK);
 }
 
-void ZooKeeper::setConsoleLog()
+ZkRet ZooKeeper::setConsoleLog()
 {
 	if((logStream_ != NULL) && (logStream_ != stderr))
 	{
@@ -527,6 +535,7 @@ void ZooKeeper::setConsoleLog()
 	}
 	logStream_ = stderr;
 	zoo_set_log_stream(logStream_);
+	return ZkRet(ZOK);
 }
 
 void ZooKeeper::miliSleep(int milisec)
@@ -536,4 +545,34 @@ void ZooKeeper::miliSleep(int milisec)
 #else
 	usleep(milisec*1000);
 #endif
+}
+
+std::string ZooKeeper::getParentPath(const std::string &path)
+{
+
+	int pos = path.rfind('/');
+	if(pos == path.npos)
+	{
+		return path;
+	}
+	if(pos == 0)
+	{
+		return "/";
+	}
+	return path.substr(0, pos);
+}
+
+std::string ZooKeeper::getNodeName(const std::string &path)
+{
+	int pos = path.rfind('/');
+	if(pos == path.npos)
+	{
+		return path;
+	}
+	return path.substr(pos+1);
+}
+
+std::string ZooKeeper::getParentNodeName(const std::string &path)
+{
+	return getNodeName(getParentPath(path));
 }

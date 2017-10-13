@@ -9,6 +9,7 @@ using namespace std;
 
 void testSet(const char *path, const char *data);
 void testCreate(const char *path, const char *data, char type, bool recursive);
+void testStaticFunctions(const std::string &path);
 
 // define data callback
 void dataCallback(const std::string &path, const std::string &value)
@@ -75,7 +76,17 @@ int main()
 	{
 		cout << "watch children failed, path=/testc" << endl;
 	}
-	
+
+	// test static functions
+	std::string path1("/");
+	std::string path2("/flour1");
+	std::string path3("/flour1/flour2");
+	std::string path4("/flour1/flour2/");
+	testStaticFunctions(path1);
+	testStaticFunctions(path2);
+	testStaticFunctions(path3);
+	testStaticFunctions(path4);
+
 	//
 	while(1)
 	{
@@ -123,4 +134,11 @@ void testCreate(const char *path, const char *data, char type, bool recursive)
 		assert(zk.exists(rpath));
 	}
 
+}
+
+void testStaticFunctions(const std::string &path)
+{
+	cout << "node name of " << path << " is " << zk.getNodeName(path) << endl;
+	cout << "parent path of " << path << " is " << zk.getParentPath(path) << endl;
+	cout << "parent node name of " << path << " is " << zk.getParentNodeName(path) << endl;
 }
