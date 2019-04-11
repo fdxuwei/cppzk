@@ -7,14 +7,16 @@
 4. 暂时只支持linux。
 
 ## 编译 ##
-需要boost头文件，因为使用了boost::function作为回调函数。
+
+依赖：
+1. boost头文件，因为使用了boost::function作为回调函数；
+2. zookeeper_mt.a，请从zookeeper自行编译。
 
 linux下：
 
     cd src
     make -f Makefile.mk
 生成libcppzk.a
-
 
 ## 如何使用 ##
 
