@@ -10,7 +10,7 @@
 
 依赖：
 1. boost头文件，因为使用了boost::function作为回调函数；
-2. zookeeper_mt.a，请从zookeeper自行编译。
+2. zookeeper_mt.a，请从zookeeper源码自行编译。
 
 linux下：
 
